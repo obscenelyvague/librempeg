@@ -11765,6 +11765,14 @@ static int mov_read_header(AVFormatContext *s)
         if (mov->frag_index.item[i].moof_offset <= mov->fragment.moof_offset)
             mov->frag_index.item[i].headers_read = 1;
 
+    for (i = 0; i < s->nb_streams; i++) {
+        if (s->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            s->streams[i]->codecpar->initial_padding = 0;
+            ffstream(s->streams[i])->first_discard_sample = 0;
+            ffstream(s->streams[i])->last_discard_sample = 0;
+        }
+    }
+
     return 0;
 }
 
@@ -12194,6 +12202,12 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
     ret = cenc_filter(mov, st, sc, pkt, current_index);
     if (ret < 0) {
         return ret;
+    }
+
+    if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+        st->codecpar->initial_padding = 0;
+        ffstream(st)->first_discard_sample = 0;
+        ffstream(st)->last_discard_sample = 0;
     }
 
     return 0;
