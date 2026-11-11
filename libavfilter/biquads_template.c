@@ -199,9 +199,10 @@ static void fn(clip_reset)(AVFilterContext *ctx,
 #endif
 
 #if BIQUAD_DI
-static void fn(biquad_di)(void *st,
+static av_always_inline void fn(biquad_di_impl)(void *st,
                           const void *input, void *output, const int len,
-                          const int ch, const int disabled)
+                          const int ch, const int disabled,
+                          const int update_fraction)
 {
     const stype *restrict ibuf = input;
     stype *restrict obuf = output;
@@ -248,7 +249,8 @@ static void fn(biquad_di)(void *st,
             o0 = imin;
         }
 
-        fraction = FRACT(o0);
+        if (update_fraction)
+            fraction = FRACT(o0);
         out = RSHIFT(o0);
         i2 = i1;
         i1 = in;
@@ -267,7 +269,35 @@ static void fn(biquad_di)(void *st,
     fcache[2] = ISNORMAL(o1) ? o1 : F(0.0);
     fcache[3] = ISNORMAL(o2) ? o2 : F(0.0);
 
+#if DEPTH == 32 || DEPTH == 64
+    stc->fraction = FRACT(o1);
+#else
     stc->fraction = fraction;
+#endif
+}
+
+#if DEPTH == 32 || DEPTH == 64
+static av_noinline void fn(biquad_di_fast)(void *st,
+                          const void *input, void *output, const int len,
+                          const int ch, const int disabled)
+{
+    fn(biquad_di_impl)(st, input, output, len, ch, disabled, 0);
+}
+#endif
+
+static void fn(biquad_di)(void *st,
+                          const void *input, void *output, const int len,
+                          const int ch, const int disabled)
+{
+#if DEPTH == 32 || DEPTH == 64
+    fn(BiquadContext) *stc = &((fn(BiquadContext) *)st)[ch];
+
+    if (stc->fraction == F(0.0)) {
+        fn(biquad_di_fast)(st, input, output, len, ch, disabled);
+        return;
+    }
+#endif
+    fn(biquad_di_impl)(st, input, output, len, ch, disabled, 1);
 }
 #endif
 
